@@ -5,16 +5,21 @@ Created on Fri Jan 21 17:15:51 2022
 @author: Loba
 """
 
+from email import message
 from random import randint
 import socket, sys  # Import socket module
 import threading
-import time
+import re
 
 
 class Listen(threading.Thread):
     def __init__(self, peer):
         threading.Thread.__init__(self)
         self.peer = peer
+        digit = "(1?[0-9]{1,2}|2[0-4][0-9]|25[0-5])"  # nombre de 0 à 255
+        self.IpPattern = re.compile(
+            "\('{}.{}.{}.{}', {}\)".format(digit, digit, digit, digit, "\d{1,5}")
+        )  # pattern => (host, port)
 
     def run(self):  # reception
 
@@ -25,31 +30,68 @@ class Listen(threading.Thread):
                 """
                 attente d'un message:
                 cas 1 => data = -1 : c'est un ACK
-                cas 2 => data = autre : un nouveau voisin veut se connecter
+                cas 2 => data = (host, port) : un nouveau voisin veut se connecter
                 """
+
                 data, peer = self.peer.sock.recvfrom(1024)
-                # ajout du nouveau voisin à la liste
-                if peer not in self.peer.neigboors:
-                    self.peer.neigboors.append(peer)
-
-                message = data.decode()
-                if message == "-1":
-                    continue
-                if message == "bye!":
-                    if peer in self.peer.neigboors:
-                        self.peer.neigboors.remove(peer)
-                    continue
-                print("reveiced {} from {}".format(message, peer))
-
-                # envoie d'un ACK => "-1"
-                self.peer.sock.sendto(
-                    bytes("-1", "utf-8"),
-                    self.peer.neigboors[-1],
-                )
+                self.processData(data, peer)
             except socket.error as e:
                 # sys.exit()
                 print(e)
                 pass
+
+    def processData(self, data: bytes, sender: str):
+        # ajout du nouveau voisin à la liste
+        print("data = ", data)
+        message = data.decode()
+        print(type(message))
+
+        if sender not in self.peer.neigboors:
+            if self.peer.neigboors != []:
+                for host, port in self.peer.neigboors:
+                    # j'informe mes voisins de l'arrivée du nouveau
+                    self.peer.sock.sendto(
+                        bytes(str(sender), "utf-8"),
+                        (host, port),
+                    )
+            self.peer.neigboors.append(sender)
+        else:
+
+            if message == "-1":
+                return
+            if message == "bye!":
+                if sender in self.peer.neigboors:
+                    self.peer.neigboors.remove(sender)
+                    return
+            else:
+                self.processAddress(message)
+
+        print("reveiced {} from {}".format(message, sender))
+
+        # envoie d'un ACK => "-1"
+        self.peer.sock.sendto(
+            bytes("-1", "utf-8"),
+            self.peer.neigboors[-1],
+        )
+
+    def processAddress(self, data: str):
+
+        try:  # si le message est une addresse je l'enregiste
+            print(data)
+            print("verif", self.IpPattern.match(str(data)))
+
+            if self.IpPattern.match(data):
+                address = data.split(", ")
+                host = self.cleanAddress(address[0])
+                port = int(self.cleanAddress(address[1]))
+                print("new :", data)
+                if (host, port) not in self.peer.neigboors:
+                    self.peer.neigboors.append((host, port))
+        except Exception as e:
+            print(e)
+
+    def cleanAddress(self, addr: str):
+        return re.sub("\(|\)|,|'| ", "", addr)
 
 
 class Actions(threading.Thread):
@@ -77,7 +119,7 @@ class Actions(threading.Thread):
                             # je leur signal mon départ
                             print(
                                 self.peer.sock.sendto(
-                                    bytes(action, "utf-8"), (host, port)
+                                    bytes("bye!", "utf-8"), (host, port)
                                 )
                             )
                     self.peer.sock.close()  # fermeture du lien
