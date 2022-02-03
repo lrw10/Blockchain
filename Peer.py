@@ -25,8 +25,6 @@ class Listen(threading.Thread):
 
         while self.peer.condi:
             try:
-                # STOPER L'ECOUTE EN FIN DE COMM
-
                 """
                 attente d'un message:
                 cas 1 => data = -1 : c'est un ACK
@@ -39,12 +37,11 @@ class Listen(threading.Thread):
                 # sys.exit()
                 print(e)
                 pass
+        self.peer.sock.close()  # fermeture du lien
 
     def processData(self, data: bytes, sender: str):
         # ajout du nouveau voisin à la liste
-        print("data = ", data)
         message = data.decode()
-        print(type(message))
 
         if sender not in self.peer.neigboors:
             if self.peer.neigboors != []:
@@ -77,14 +74,10 @@ class Listen(threading.Thread):
     def processAddress(self, data: str):
 
         try:  # si le message est une addresse je l'enregiste
-            print(data)
-            print("verif", self.IpPattern.match(str(data)))
-
             if self.IpPattern.match(data):
                 address = data.split(", ")
                 host = self.cleanAddress(address[0])
                 port = int(self.cleanAddress(address[1]))
-                print("new :", data)
                 if (host, port) not in self.peer.neigboors:
                     self.peer.neigboors.append((host, port))
         except Exception as e:
@@ -112,18 +105,15 @@ class Actions(threading.Thread):
             elif action == "s":
                 try:
                     print("Close")
-                    self.peer.condi = False  # arret de la boucle
+
                     # si je suis connecté à des voisins
                     if self.peer.neigboors != []:
                         for host, port in self.peer.neigboors:
                             # je leur signal mon départ
-                            print(
-                                self.peer.sock.sendto(
-                                    bytes("bye!", "utf-8"), (host, port)
-                                )
-                            )
-                    self.peer.sock.close()  # fermeture du lien
-                    sys.exit()  # arret du programme
+                            self.peer.sock.sendto(bytes("bye!", "utf-8"), (host, port))
+
+                    self.peer.condi = False  # arret de la boucle
+
                 except Exception as e:
                     print(e, "\n déconnection échoué.")
 
@@ -134,15 +124,12 @@ class Actions(threading.Thread):
                 # je récupère l'adresse de le cible
                 address = (input("Host:"), int(input("Port:")))
                 try:
-                    print(
-                        self.peer.sock.sendto(
-                            bytes(input("Entrez un message: "), "utf-8"), address
-                        )
+                    self.peer.sock.sendto(
+                        bytes(input("Entrez un message: "), "utf-8"), address
                     )
                 except socket.error as e:
                     print(e, "\nconnection échoué.")
             else:
-                print("che ne compwen paa")
                 continue
 
 
@@ -152,6 +139,7 @@ class Peer:
         self.port = port
         self.name = name
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.sock.settimeout(10)
         self.sock.bind((self.host, int(self.port)))
         self.neigboors = []
         self.condi = True  # condition boucle infinie
