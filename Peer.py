@@ -40,19 +40,23 @@ class Listen(threading.Thread):
                 pass
         self.peer.sock.close()  # fermeture du lien
 
-    def processData(self, data: bytes, sender: str):
+    def processData(self, data: bytes, sender: tuple):
         # ajout du nouveau voisin à la liste
         message = data.decode()
-
-        if sender not in self.peer.neigboors:
-            if self.peer.neigboors != []:
-                for host, port in self.peer.neigboors:
-                    # j'informe mes voisins de l'arrivée du nouveau
-                    self.peer.sock.sendto(
-                        bytes(str(sender), "utf-8"),
-                        (host, port),
-                    )
-            self.peer.neigboors.append(sender)
+        senderHost = sender[0]
+        senderPort = sender[1]
+        # si je ne m'envoi pas un message à moi même
+        if self.peer.host != senderHost and self.peer.port != senderPort:
+            # si c'est un nouveau voisin
+            if sender not in self.peer.neigboors:
+                if self.peer.neigboors != []:
+                    for host, port in self.peer.neigboors:
+                        # j'informe mes voisins de l'arrivée du nouveau
+                        self.peer.sock.sendto(
+                            bytes(str(sender), "utf-8"),
+                            (host, port),
+                        )
+                self.peer.neigboors.append(sender)
         else:
 
             if message == "-1":
@@ -69,7 +73,7 @@ class Listen(threading.Thread):
         # envoie d'un ACK => "-1"
         self.peer.sock.sendto(
             bytes("-1", "utf-8"),
-            self.peer.neigboors[-1],
+            sender,
         )
 
     def processAddress(self, data: str):
