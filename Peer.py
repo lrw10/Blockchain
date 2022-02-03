@@ -30,11 +30,12 @@ class Listen(threading.Thread):
                 cas 1 => data = -1 : c'est un ACK
                 cas 2 => data = (host, port) : un nouveau voisin veut se connecter
                 """
-
-                data, peer = self.peer.sock.recvfrom(1024)
-                self.processData(data, peer)
+                try:
+                    data, peer = self.peer.sock.recvfrom(1024)
+                    self.processData(data, peer)
+                except socket.timeout as e:
+                    continue
             except socket.error as e:
-                # sys.exit()
                 print(e)
                 pass
         self.peer.sock.close()  # fermeture du lien
@@ -139,7 +140,7 @@ class Peer:
         self.port = port
         self.name = name
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.sock.settimeout(10)
+        self.sock.settimeout(0.00001)
         self.sock.bind((self.host, int(self.port)))
         self.neigboors = []
         self.condi = True  # condition boucle infinie
