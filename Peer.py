@@ -25,7 +25,7 @@ class Listen(threading.Thread):
 
         while self.peer.condi:
             try:
-                # FERMER CHAQUE CONNEXION OUVERTE
+                # STOPER L'ECOUTE EN FIN DE COMM
 
                 """
                 attente d'un message:
@@ -147,7 +147,7 @@ class Actions(threading.Thread):
 
 
 class Peer:
-    def __init__(self, host, port, name=None):
+    def __init__(self, host=socket.gethostname(), port=1234, name=None):
         self.host = host
         self.port = port
         self.name = name
