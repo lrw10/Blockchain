@@ -45,28 +45,29 @@ class Listen(threading.Thread):
         message = data.decode()
         senderHost = sender[0]
         senderPort = sender[1]
-        # si je ne m'envoi pas un message à moi même
-        if self.peer.host != senderHost and self.peer.port != senderPort:
-            # si c'est un nouveau voisin
-            if sender not in self.peer.neigboors:
-                if self.peer.neigboors != []:
-                    for host, port in self.peer.neigboors:
-                        # j'informe mes voisins de l'arrivée du nouveau
-                        self.peer.sock.sendto(
-                            bytes(str(sender), "utf-8"),
-                            (host, port),
-                        )
-                self.peer.neigboors.append(sender)
-        else:
+        if senderHost == self.peer.host:
+            if senderPort == self.peer.port:
+                return  # je ne prend pas en compte les messages envoyés à moi-même
 
-            if message == "-1":
+        # si c'est un nouveau voisin
+        if sender not in self.peer.neighbors:
+            self.peer.neighbors.append(sender)
+            if self.peer.neighbors != []:
+                for host, port in self.peer.neighbors:
+                    # j'informe mes voisins de l'arrivée du nouveau
+                    self.peer.sock.sendto(
+                        bytes(str(sender), "utf-8"),
+                        (host, port),
+                    )
+
+        if message == "-1":
+            return
+        if message == "bye!":
+            if sender in self.peer.neighbors:
+                self.peer.neighbors.remove(sender)
                 return
-            if message == "bye!":
-                if sender in self.peer.neigboors:
-                    self.peer.neigboors.remove(sender)
-                    return
-            else:
-                self.processAddress(message)
+        else:
+            self.processAddress(message)
 
         print("reveiced {} from {}".format(message, sender))
 
@@ -83,13 +84,25 @@ class Listen(threading.Thread):
                 address = data.split(", ")
                 host = self.cleanAddress(address[0])
                 port = int(self.cleanAddress(address[1]))
-                if (host, port) not in self.peer.neigboors:
-                    self.peer.neigboors.append((host, port))
+                if (host, port) not in self.peer.neighbors and (
+                    (host, port) != (self.peer.host, self.peer.port)
+                ):
+                    self.peer.neighbors.append((host, port))
+
+                    self.sendMyneighbors()
+
         except Exception as e:
             print(e)
 
     def cleanAddress(self, addr: str):
         return re.sub("\(|\)|,|'| ", "", addr)
+
+    def sendMyneighbors(self):
+        if self.peer.neighbors != []:
+            for neighbor in self.peer.neighbors:
+                for host, port in self.peer.neighbors:
+                    # j'informe mes voisins de l'arrivée du nouveau
+                    self.peer.sock.sendto(bytes(str((host, port)), "utf-8"), neighbor)
 
 
 class Actions(threading.Thread):
@@ -104,7 +117,7 @@ class Actions(threading.Thread):
             action = input(">")
 
             if action == "v":
-                print(self.peer.neigboors)
+                print(self.peer.neighbors)
 
             # déconnection
             elif action == "s":
@@ -112,8 +125,8 @@ class Actions(threading.Thread):
                     print("Close")
 
                     # si je suis connecté à des voisins
-                    if self.peer.neigboors != []:
-                        for host, port in self.peer.neigboors:
+                    if self.peer.neighbors != []:
+                        for host, port in self.peer.neighbors:
                             # je leur signal mon départ
                             self.peer.sock.sendto(bytes("bye!", "utf-8"), (host, port))
 
@@ -141,12 +154,12 @@ class Actions(threading.Thread):
 class Peer:
     def __init__(self, host=socket.gethostname(), port=1234, name=None):
         self.host = host
-        self.port = port
+        self.port = int(port)
         self.name = name
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.sock.settimeout(0.00001)
-        self.sock.bind((self.host, int(self.port)))
-        self.neigboors = []
+        self.sock.bind((self.host, self.port))
+        self.neighbors = []
         self.condi = True  # condition boucle infinie
 
     def run(self):
