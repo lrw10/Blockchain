@@ -8,6 +8,7 @@ Created on Fri Jan 21 17:15:51 2022
 from random import randint
 import socket, sys  # Import socket module
 import threading
+from Node import Node
 import re
 
 
@@ -22,7 +23,7 @@ class Listen(threading.Thread):
 
     def run(self):  # reception
 
-        while self.miner.condi:
+        while self.miner.node.run:
             try:
                 """
                 attente d'un message:
@@ -30,8 +31,8 @@ class Listen(threading.Thread):
                 cas 2 => data = (host, port) : un nouveau voisin veut se connecter
                 """
                 try:
-                    data, miner = self.miner.sock.recvfrom(1024)
-                    self.processData(data, miner)
+                    data, sender = self.miner.sock.recvfrom(1024)
+                    self.processData(data, sender)
                 except socket.timeout as e:
                     continue
             except socket.error as e:
@@ -44,15 +45,15 @@ class Listen(threading.Thread):
         message = data.decode()
         senderHost = sender[0]
         senderPort = sender[1]
-        if senderHost == self.miner.host:
-            if senderPort == self.miner.port:
+        if senderHost == self.miner.node.host:
+            if senderPort == self.miner.node.port:
                 return  # je ne prend pas en compte les messages envoyés à moi-même
 
         # si c'est un nouveau voisin
-        if sender not in self.miner.neighbors:
-            self.miner.neighbors.append(sender)
-            if self.miner.neighbors != []:
-                for host, port in self.miner.neighbors:
+        if sender not in self.miner.node.miners:
+            self.miner.node.miners.append(sender)
+            if self.miner.node.miners != []:
+                for host, port in self.miner.node.miners:
                     # j'informe mes voisins de l'arrivée du nouveau
                     self.miner.sock.sendto(
                         bytes(str(sender), "utf-8"),
@@ -62,8 +63,8 @@ class Listen(threading.Thread):
         if message == "-1":
             return
         if message == "bye!":
-            if sender in self.miner.neighbors:
-                self.miner.neighbors.remove(sender)
+            if sender in self.miner.node.miners:
+                self.miner.node.miners.remove(sender)
                 return
         else:
             self.processAddress(message)
@@ -83,10 +84,10 @@ class Listen(threading.Thread):
                 address = data.split(", ")
                 host = self.cleanAddress(address[0])
                 port = int(self.cleanAddress(address[1]))
-                if (host, port) not in self.miner.neighbors and (
-                    (host, port) != (self.miner.host, self.miner.port)
+                if (host, port) not in self.miner.node.miners and (
+                    (host, port) != (self.miner.node.host, self.miner.node.port)
                 ):
-                    self.miner.neighbors.append((host, port))
+                    self.miner.node.miners.append((host, port))
 
                     self.sendMyneighbors()
 
@@ -97,9 +98,9 @@ class Listen(threading.Thread):
         return re.sub("\(|\)|,|'| ", "", addr)
 
     def sendMyneighbors(self):
-        if self.miner.neighbors != []:
-            for neighbor in self.miner.neighbors:
-                for host, port in self.miner.neighbors:
+        if self.miner.node.miners != []:
+            for neighbor in self.miner.node.miners:
+                for host, port in self.miner.node.miners:
                     # j'informe mes voisins de l'arrivée du nouveau
                     self.miner.sock.sendto(bytes(str((host, port)), "utf-8"), neighbor)
 
@@ -111,12 +112,12 @@ class Actions(threading.Thread):
 
     def run(self):  # envoi
 
-        while self.miner.condi:
+        while self.miner.node.run:
 
             action = input(">")
 
             if action == "v":
-                print(self.miner.neighbors)
+                print(self.miner.node.miners)
 
             # déconnection
             elif action == "s":
@@ -124,19 +125,26 @@ class Actions(threading.Thread):
                     print("Close")
 
                     # si je suis connecté à des voisins
-                    if self.miner.neighbors != []:
-                        for host, port in self.miner.neighbors:
+                    if self.miner.node.miners != []:
+                        for host, port in self.miner.node.miners:
                             # je leur signal mon départ
                             self.miner.sock.sendto(bytes("bye!", "utf-8"), (host, port))
 
-                    self.miner.condi = False  # arret de la boucle
+                    self.miner.node.run = False  # arret de la boucle
 
                 except Exception as e:
                     print(e, "\n déconnection échoué.")
 
             elif action == "id":
                 print(
-                    "Host = ", self.miner.host, "\n", "Port = ", self.miner.port, "\n"
+                    " Host = ",
+                    self.miner.node.host,
+                    "\n",
+                    "Port = ",
+                    self.miner.node.port,
+                    "\n",
+                    "Id = ",
+                    self.miner.node.id,
                 )
 
             elif action == "connect":
@@ -153,15 +161,15 @@ class Actions(threading.Thread):
 
 
 class Miner:
-    def __init__(self, host=socket.gethostname(), port=1234, name=None):
-        self.host = host
-        self.port = int(port)
-        self.name = name
+
+    __type = "MINER"
+    __timeout = 0.0000001
+
+    def __init__(self, host=socket.gethostname(), port=1234):
+        self.node = Node(host, port, self.__type)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.sock.settimeout(0.00001)
-        self.sock.bind((self.host, self.port))
-        self.neighbors = []
-        self.condi = True  # condition boucle infinie
+        self.sock.settimeout(self.__timeout)
+        self.sock.bind((self.node.host, self.node.port))
 
     def run(self):
         L = Listen(self)
