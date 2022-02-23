@@ -1,5 +1,6 @@
-from Node import Node
+from Transaction import Transaction
 from random import randint
+from Node import Node
 import socket, sys
 import pickle as pickle
 import threading
@@ -123,7 +124,7 @@ class Listen(threading.Thread):
 
 
 class AutoSend(threading.Thread):
-    __SLEEP = 1
+    __SLEEP = 3
 
     def __init__(self, wallet):
         threading.Thread.__init__(self)
@@ -135,9 +136,14 @@ class AutoSend(threading.Thread):
 
                 time.sleep(self.__SLEEP)
                 try:
-                    # Send the message
+                    # Send random transaction
                     for id, miner in self.wallet.miners.items():
-                        message = (str(randint(0, 100000)), self.wallet.node.id)
+                        transaction = Transaction(
+                            str(randint(0, 100000)),
+                            str(randint(0, 100000)),
+                            str(randint(0, 100000)),
+                        )
+                        message = transaction
 
                         self.wallet.sock.sendto(
                             self.wallet.serialize(message), (miner.host, miner.port)
