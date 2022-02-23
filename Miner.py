@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-
-from ctypes.wintypes import PLONG
+"""
+@author: Loba
+"""
+import traceback
+from Transaction import Transaction
 from Node import Node
 from Block import Block
 import pickle as pickle
@@ -92,7 +95,7 @@ class Listen(threading.Thread):
                 """
                 try:
                     # wait for new message
-                    data, sender = self.miner.sock.recvfrom(1024)
+                    data, sender = self.miner.sock.recvfrom(8192)
                     # ignore self sended messages
                     if not self.sendToMyself(sender):
                         self.processData(data, sender)
@@ -126,10 +129,21 @@ class Listen(threading.Thread):
                     self.processMiner(receivedNode, sender)
                 elif receivedNode.type == "WALLET":
                     self.processWallet(receivedNode, sender)
-
+            # Is it a Block?
             if isinstance(receivedNode, Block):
-                ########## receivedNode.get ############# verifier que le block recu est plus avancé
-                pass
+                if len(self.miner.blockchain) == 0:
+                    self.miner.blockchain.append(receivedNode)
+                elif (
+                    receivedNode.getBlockNumber()
+                    > self.miner.blockchain[-1].getBlockNumber()
+                ):
+                    self.miner.blockchain[-1] = receivedNode
+                else:
+                    pass
+            # Is it a Transaction?
+            elif isinstance(receivedNode, Transaction):
+                self.broadcast(receivedNode, sender)
+
             # Is it a message?
             elif (
                 isinstance(receivedNode, tuple)
@@ -143,15 +157,11 @@ class Listen(threading.Thread):
                     elif receivedNode[1] in self.miner.wallets:
                         del self.miner.wallets[receivedNode[1]]
 
-                # A message from a wallet
-                elif receivedNode[1] in self.miner.wallets:
-                    self.broadcast(receivedNode)
-                    pass
-                if receivedNode[0] != "Ping" and receivedNode[0] != "Pong":
-                    print("reveiced {} from {}".format(receivedNode, sender))
+            print("reveiced {} from {}".format(receivedNode, sender))
 
         except Exception as e:
             print("Other_Pickel_Error", e)
+            traceback.print_exc()
             pass
 
         return
@@ -221,20 +231,22 @@ class Listen(threading.Thread):
                 sender,
             )
 
-    def broadcast(self, message):
+    def broadcast(self, message, sender):
         """Broadcast messages from wallets and build blocks
 
         Parameter
         ----------
         message : tuple
+        sender: tuple
         """
         #############self.miner.bloc.addTransation(message[1])
-        self.addTransactionToBlock(message[1])
+        self.addTransactionToBlock(message)
         for id, neighbor in self.miner.miners.items():
-            self.miner.sock.sendto(
-                self.miner.serialize(message),
-                (neighbor.host, neighbor.port),
-            )
+            if sender != (neighbor.host, neighbor.port):
+                self.miner.sock.sendto(
+                    self.miner.serialize(message),
+                    (neighbor.host, neighbor.port),
+                )
 
     def addTransactionToBlock(self, transaction):
         """Add transactions to blocks
@@ -243,18 +255,25 @@ class Listen(threading.Thread):
         ----------
         transaction : Transaction object
         """
-        genesis = -1
+        print("Compute block ", len(self.miner.blockchain))
         if self.miner.blockchain == []:
-            self.miner.blockchain.append(Block(genesis))
-
+            genesis = Block(-1, -1)
+            genesis.closeBlock()
+            self.miner.blockchain.append(
+                Block(genesis.getPrevBlockHash(), genesis.getBlockNumber() + 1)
+            )
         if self.miner.blockchain[-1].addTransaction(transaction):
-            pass
+            return
 
         else:
-            self.miner.blockchain[-1].closeBlock()
-            self.sendBlock(self.miner.blockchain[-1])
+            if self.miner.blockchain[-1].getBlockHash != None:
+                self.miner.blockchain[-1].closeBlock()
+                self.sendBlock(self.miner.blockchain[-1])
             self.miner.blockchain.append(
-                Block(self.miner.blockchain[-1].getBlockHash())
+                Block(
+                    self.miner.blockchain[-1].getBlockHash(),
+                    self.miner.blockchain[-1].getBlockNumber() + 1,
+                )
             )
             self.miner.blockchain[-1].addTransaction(transaction)
 
