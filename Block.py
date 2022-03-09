@@ -19,7 +19,7 @@ class Block:
         self.__blockNumber = id
         self.__transactions = {}
         self.__merkelRoot = None
-        self.__time = time.time()
+        # self.__time = None  # time.time()
         self.__nonce = None
         self.__blockHash = None
         self.__id = uuid.uuid4()
@@ -40,8 +40,8 @@ class Block:
         else:
             return None
 
-    def getTime(self):
-        return self.__time
+    # def getTime(self):
+    #     return self.__time
 
     def getMerkelRoot(self):
         if self.__merkelRoot:
@@ -82,7 +82,7 @@ class Block:
             self.__blockHash = self.computeBlockHash()
             self.__nonce = self.computeNonce()
             self.__merkelRoot = self.computeMerkelRoot()
-            self.__time = time.time()
+            # self.__time = None  # time.time()
 
     def computeBlockHash(self):
         """compute the blockHash of the current block
