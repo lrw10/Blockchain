@@ -60,28 +60,28 @@ class Listen(threading.Thread):
         """
         try:
 
-            receivedNode = self.wallet.deserialize(data)
+            deserializedData = self.wallet.deserialize(data)
             # Is it a Node?
-            if isinstance(receivedNode, Node):
-                if receivedNode.type == "MINER":
-                    self.processMiner(receivedNode, sender)
-                elif receivedNode.type == "WALLET":
+            if isinstance(deserializedData, Node):
+                if deserializedData.type == "MINER":
+                    self.processMiner(deserializedData, sender)
+                elif deserializedData.type == "WALLET":
                     return
 
             # Is it a response?
             elif (
-                isinstance(receivedNode, tuple)
-                and isinstance(receivedNode[0], str)
-                and isinstance(receivedNode[1], uuid.UUID)
+                isinstance(deserializedData, tuple)
+                and isinstance(deserializedData[0], str)
+                and isinstance(deserializedData[1], uuid.UUID)
             ):
-                if receivedNode[0] == "bye!":
+                if deserializedData[0] == "bye!":
                     # If I know the sender I delete it
-                    if receivedNode[1] in self.wallet.miners:
-                        del self.wallet.miners[receivedNode[1]]
+                    if deserializedData[1] in self.wallet.miners:
+                        del self.wallet.miners[deserializedData[1]]
 
                 else:
                     pass
-            print("reveiced {} from {}".format(receivedNode, sender))
+            print("reveiced {} from {}".format(deserializedData, sender))
 
         except Exception as e:
             print("Other_Pickel_Error", e)
