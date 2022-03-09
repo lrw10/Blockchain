@@ -22,7 +22,6 @@ class Block:
         # self.__time = None  # time.time()
         self.__nonce = None
         self.__blockHash = None
-        self.__id = uuid.uuid4()
         self.__noncePattern = "0xd"
 
     def getBlockHash(self):
@@ -33,6 +32,9 @@ class Block:
 
     def getPrevBlockHash(self):
         return self.__prevBlockHash
+
+    def setPrevBlockHash(self, prevBlockHash):
+        self.__prevBlockHash = prevBlockHash
 
     def getNonce(self):
         if self.__nonce:
@@ -58,11 +60,11 @@ class Block:
     def setMaxTransactions(self, newValue):
         self.__maxTransactions = newValue
 
-    def getId(self):
-        return self.__id
-
     def getBlockNumber(self):
         return self.__blockNumber
+
+    def setBlockNumber(self, num):
+        self.__blockNumber = num
 
     def addTransaction(self, transaction):
 
@@ -91,7 +93,9 @@ class Block:
         Returns
             The sha256 hash of the current block in hexadecimal format
         """
-        return self.strToHex(hashlib.sha256(pickle.dumps(self)).digest().hex())
+        return self.strToHex(
+            hashlib.sha256(pickle.dumps(self.__transactions)).digest().hex()
+        )
 
     def computeNonce(self):
         """compute a hexadecimal value that verify self.__noncePattern constraint by multiplication with self.__blockHash
@@ -119,8 +123,6 @@ class Block:
             Bool
         """
         for i in range(len(self.__noncePattern)):
-            print("nonce[i] = ", nonce[i])
-            print("noncePattern[i] = ", self.__noncePattern[i])
             if nonce[i] != self.__noncePattern[i]:
                 return False
 
