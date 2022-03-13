@@ -71,7 +71,9 @@ class Block:
         if transaction.getId() not in self.__transactions:
             # if I have enougth place to add a transaction I add it
             if len(self.__transactions) < self.__maxTransactions:
-                self.__transactions[transaction.getId()] = transaction
+                self.__transactions[transaction.getId()] = self.strToHex(
+                    hashlib.sha256(pickle.dumps(transaction)).digest().hex()
+                )
                 return True
 
             else:
@@ -80,11 +82,11 @@ class Block:
             pass
 
     def closeBlock(self):
-        if len(self.__transactions) == self.__maxTransactions:
-            self.__blockHash = self.computeBlockHash()
-            self.__nonce = self.computeNonce()
-            self.__merkelRoot = self.computeMerkelRoot()
-            # self.__time = None  # time.time()
+        # if len(self.__transactions) == self.__maxTransactions:
+        self.__blockHash = self.computeBlockHash()
+        self.__nonce = self.computeNonce()
+        self.__merkelRoot = self.computeMerkelRoot()
+        # self.__time = None  # time.time()
 
     def computeBlockHash(self):
         """compute the blockHash of the current block
@@ -93,6 +95,7 @@ class Block:
         Returns
             The sha256 hash of the current block in hexadecimal format
         """
+
         return self.strToHex(
             hashlib.sha256(pickle.dumps(self.__transactions)).digest().hex()
         )
@@ -105,13 +108,14 @@ class Block:
             Hexadecimal
         """
         nonce = hex(1)
+        print("Comput Nonce ...")
         while not self.valideNonce(nonce):
-            print("Comput Nonce ...")
+
             nonce = self.intToHex(
                 self.hexToInt(nonce) * self.hexToInt(self.__blockHash)
             )
 
-            print((nonce))
+            # print((nonce))
             self.valideNonce(nonce)
         return nonce
 
