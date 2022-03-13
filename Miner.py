@@ -9,6 +9,7 @@ from Block import Block
 import pickle as pickle
 import socket, sys
 import threading
+import time
 import uuid
 import re
 import time
@@ -80,6 +81,8 @@ class Listen(threading.Thread):
             )
         )  # pattern => (host, port)
 
+        self.__sendBlockchainRequest = re.compile("sendMe\[[0-9]+\]")
+
     def run(self):
         """
         Process received messages
@@ -122,42 +125,42 @@ class Listen(threading.Thread):
         """
         try:
 
-            receivedNode = self.miner.deserialize(data)
+            deserializedData = self.miner.deserialize(data)
             # Is it a Node?
-            if isinstance(receivedNode, Node):
-                if receivedNode.type == "MINER":
-                    self.processMiner(receivedNode, sender)
-                elif receivedNode.type == "WALLET":
-                    self.processWallet(receivedNode, sender)
+            if isinstance(deserializedData, Node):
+                if deserializedData.type == "MINER":
+                    self.processMiner(deserializedData, sender)
+                elif deserializedData.type == "WALLET":
+                    self.processWallet(deserializedData, sender)
             # Is it a Block?
-            if isinstance(receivedNode, Block):
-                if len(self.miner.blockchain) == 0:
-                    self.miner.blockchain.append(receivedNode)
-                elif (
-                    receivedNode.getBlockNumber()
-                    > self.miner.blockchain[-1].getBlockNumber()
-                ):
-                    self.miner.blockchain[-1] = receivedNode
-                else:
-                    pass
+            if isinstance(deserializedData, Block):
+                self.processBlock(deserializedData, sender)
             # Is it a Transaction?
-            elif isinstance(receivedNode, Transaction):
-                self.broadcast(receivedNode, sender)
+            elif isinstance(deserializedData, Transaction):
+                self.broadcast(deserializedData, sender)
 
             # Is it a message?
             elif (
-                isinstance(receivedNode, tuple)
-                and isinstance(receivedNode[0], str)
-                and isinstance(receivedNode[1], uuid.UUID)
+                isinstance(deserializedData, tuple)
+                and isinstance(deserializedData[0], str)
+                and isinstance(deserializedData[1], uuid.UUID)
             ):
-                if receivedNode[0] == "bye!":
+                if deserializedData[0] == "bye!":
                     # If I know the sender I delete it
-                    if receivedNode[1] in self.miner.miners:
-                        del self.miner.miners[receivedNode[1]]
-                    elif receivedNode[1] in self.miner.wallets:
-                        del self.miner.wallets[receivedNode[1]]
+                    if deserializedData[1] in self.miner.miners:
+                        del self.miner.miners[deserializedData[1]]
+                    elif deserializedData[1] in self.miner.wallets:
+                        del self.miner.wallets[deserializedData[1]]
 
-            print("reveiced {} from {}".format(receivedNode, sender))
+                if self.__sendBlockchainRequest.match(deserializedData[0]):
+                    # self.processBlockRequest(deserializedData[0], sender)
+                    request = self.cleanSendBlockRequest(deserializedData[0])
+                    thread = threading.Thread(
+                        target=self.processBlockRequest(request, sender),
+                        args=(),
+                    )
+                    thread.start()
+            print("reveiced {} from {}".format(deserializedData, sender))
 
         except Exception as e:
             print("Other_Pickel_Error", e)
@@ -203,7 +206,8 @@ class Listen(threading.Thread):
                     self.miner.serialize(neighbor),
                     (node.host, node.port),
                 )
-
+            # I send it my blockchain
+            self.processBlockRequest(-1, sender)
             # I add my new neighbor to my neighbor list
             self.miner.neighbors[node.id] = node
             # send an "ACK" => self.miner.node
@@ -255,34 +259,113 @@ class Listen(threading.Thread):
         ----------
         transaction : Transaction object
         """
-        print("Compute block ", len(self.miner.blockchain))
-        if self.miner.blockchain == []:
-            genesis = Block(-1, -1)
-            genesis.closeBlock()
-            self.miner.blockchain.append(
-                Block(genesis.getPrevBlockHash(), genesis.getBlockNumber() + 1)
-            )
-        if self.miner.blockchain[-1].addTransaction(transaction):
+        print("Compute block ", len(self.miner.blockchain) - 1)
+
+        if self.miner.myBlock.addTransaction(transaction):
             return
 
         else:
-            if self.miner.blockchain[-1].getBlockHash != None:
-                self.miner.blockchain[-1].closeBlock()
-                self.sendBlock(self.miner.blockchain[-1])
-            self.miner.blockchain.append(
-                Block(
-                    self.miner.blockchain[-1].getBlockHash(),
-                    self.miner.blockchain[-1].getBlockNumber() + 1,
-                )
-            )
-            self.miner.blockchain[-1].addTransaction(transaction)
 
-    def sendBlock(self, block):
-        for id, neighbor in self.miner.miners.items():
-            self.miner.sock.sendto(
-                self.miner.serialize(block),
-                (neighbor.host, neighbor.port),
+            self.miner.myBlock != None
+            thread = threading.Thread(
+                target=self.miner.myBlock.closeBlock(),
+                args=(),
             )
+            thread.start()
+            print("Taille du block {}".format(sys.getsizeof(self.miner.myBlock)))
+            self.sendBlock(self.miner.myBlock)
+
+            self.miner.blockchain.append(self.miner.myBlock)
+
+            self.miner.myBlock = Block(
+                self.miner.blockchain[-1].getBlockHash(),
+                self.miner.blockchain[-1].getBlockNumber() + 1,
+            )
+            self.miner.myBlock.addTransaction(transaction)
+
+    def sendBlock(self, block, dest=None):
+        if isinstance(block, Block):
+            if dest is None:
+                for id, neighbor in self.miner.miners.items():
+                    self.miner.sock.sendto(
+                        self.miner.serialize(block),
+                        (neighbor.host, neighbor.port),
+                    )
+
+            # elif (
+            #     isinstance(dest, tuple)
+            #     and isinstance(dest[0], str)
+            #     and isinstance(dest[1], int)
+            # ):
+            else:
+                self.miner.sock.sendto(
+                    self.miner.serialize(block),
+                    dest,
+                )
+            # print("send block {}".format(block.getBlockNumber()))
+
+    def processBlock(self, block, sender):
+        print(
+            "received block n° {}; lastBlock block {}".format(
+                block.getBlockNumber(),
+                self.miner.blockchain[-1].getBlockNumber(),
+            )
+        )
+
+        # print(
+        #     "received block prevBlockHash {}; lastBlock blockHash {}".format(
+        #         block.getPrevBlockHash(),
+        #         self.miner.blockchain[-1].getBlockHash(),
+        #     )
+        # )
+
+        if block.getBlockNumber() >= self.miner.myBlock.getBlockNumber():
+            if (
+                block.getBlockNumber() > self.miner.blockchain[-1].getBlockNumber() + 1
+            ):  # ==> demander le block qui suit le block juste apres mon dernier block et verifier la compatibilité
+                # send me your blockchain from self.miner.blockchain[-1].getId() + 1
+
+                request = (
+                    "sendMe[{}]".format(self.miner.blockchain[-1].getBlockNumber() + 1),
+                    self.miner.node.id,
+                )
+                self.miner.sock.sendto(self.miner.serialize(request), sender)
+                print(
+                    "send request for block {} => my last one is {}".format(
+                        block.getBlockNumber(),
+                        self.miner.blockchain[-1].getBlockNumber(),
+                    )
+                )
+
+        if block.getPrevBlockHash() == self.miner.blockchain[-1].getBlockHash():
+            print("add {} => to my blockchain".format(block.getBlockNumber()))
+            self.miner.blockchain.append(block)
+            self.miner.myBlock.setPrevBlockHash(block.getPrevBlockHash())
+            self.miner.myBlock.setBlockNumber(block.getBlockNumber() + 1)
+
+        # elif self.miner.blockchain[-1].getBlockHash() == None and block.
+        else:
+            pass
+
+    def processBlockRequest(self, firstBlockId, sender):
+        # blockId = self.cleanSendBlockRequest(request)
+        print("synchronize ... with {}".format(sender))
+        while firstBlockId < len(self.miner.blockchain):
+            self.sendBlock(self.miner.blockchain[firstBlockId], sender)
+            firstBlockId += 1
+
+    def cleanSendBlockRequest(self, request):
+        try:
+            return int(
+                re.search(
+                    "[0-9]+",
+                    request,
+                ).group(0)
+            )
+        except Exception as e:
+            print("Other_Regex_Error", e)
+            traceback.print_exc()
+            pass
 
 
 class Actions(threading.Thread):
@@ -391,6 +474,10 @@ class Miner:
         self.neighbors = {}
         self.wallets = {}
         self.blockchain = []
+        genesis = Block(-1, -1)
+        genesis.closeBlock()
+        self.myBlock = Block(genesis.getBlockHash(), genesis.getBlockNumber() + 1)
+        self.blockchain.append(genesis)
 
     def run(self):
         L = Listen(self)
