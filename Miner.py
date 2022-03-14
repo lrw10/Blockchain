@@ -144,7 +144,6 @@ class Listen(threading.Thread):
                     pass
                 if receivedNode[0] != "Ping" and receivedNode[0] != "Pong":
                     print("reveiced {} from {}".format(receivedNode, sender))
-
         except Exception as e:
             print("Other_Pickel_Error", e)
             pass
