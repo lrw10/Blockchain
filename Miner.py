@@ -108,7 +108,7 @@ class Listen(threading.Thread):
                     continue
             ### Arrive quand on envoie un message à qqn qui n'existe pas avec la classe PingActions
             except socket.error as e:
-                print(self.miner.pinged, "ne répond plus")
+                print(self.miner.pinged, "not respond")
                 del self.miner.neighbors[self.miner.pinged]
                 pass
         self.miner.sock.close()  # close the link
@@ -147,8 +147,8 @@ class Listen(threading.Thread):
             ):
                 if deserializedData[0] == "bye!":
                     # If I know the sender I delete it
-                    if deserializedData[1] in self.miner.miners:
-                        del self.miner.miners[deserializedData[1]]
+                    if deserializedData[1] in self.miner.neighbors:
+                        del self.miner.neighbors[deserializedData[1]]
                     elif deserializedData[1] in self.miner.wallets:
                         del self.miner.wallets[deserializedData[1]]
 
@@ -245,7 +245,7 @@ class Listen(threading.Thread):
         """
         #############self.miner.bloc.addTransation(message[1])
         self.addTransactionToBlock(message)
-        for id, neighbor in self.miner.miners.items():
+        for id, neighbor in self.miner.neighbors.items():
             if sender != (neighbor.host, neighbor.port):
                 self.miner.sock.sendto(
                     self.miner.serialize(message),
@@ -286,7 +286,7 @@ class Listen(threading.Thread):
     def sendBlock(self, block, dest=None):
         if isinstance(block, Block):
             if dest is None:
-                for id, neighbor in self.miner.miners.items():
+                for id, neighbor in self.miner.neighbors.items():
                     self.miner.sock.sendto(
                         self.miner.serialize(block),
                         (neighbor.host, neighbor.port),
@@ -383,7 +383,7 @@ class Actions(threading.Thread):
 
             # neighbors
             if action == "v":
-                print("Miners: ", self.miner.miners)
+                print("neighbors: ", self.miner.neighbors)
                 print("\n")
                 print("Wallets: ", self.miner.wallets)
 
@@ -440,7 +440,7 @@ class Actions(threading.Thread):
             # I say bye to my neighbors
             deconnectionMessage = ("bye!", self.miner.node.id)
 
-            for id, neighbor in self.miner.miners.items():
+            for id, neighbor in self.miner.neighbors.items():
                 self.miner.sock.sendto(
                     self.miner.serialize(deconnectionMessage),
                     (neighbor.host, neighbor.port),
