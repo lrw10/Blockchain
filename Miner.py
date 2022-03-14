@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*- 
-   
+# -*- coding: utf-8 -*-
+
 from ctypes.wintypes import PLONG
 from Node import Node
 import pickle as pickle
@@ -8,7 +8,8 @@ import threading
 import uuid
 import re
 import time
-#from ping3 import ping
+
+# from ping3 import ping
 
 
 class PingActions(threading.Thread):
@@ -23,36 +24,45 @@ class PingActions(threading.Thread):
         while self.miner.node.run:
 
             time.sleep(10)
-            neighbors_copy = neighbors_copy = self.miner.neighbors.copy()
+            if self.miner.node.run:
+                neighbors_copy = neighbors_copy = self.miner.neighbors.copy()
 
-            if not neighbors_copy: 
-                continue
-            else:
-                for id, neighbor in neighbors_copy.items():
-                    # I say bye to my neighbors
-                    deconnectionMessage = ("Ping", self.miner.node.id, self.miner.node.host, self.miner.node.port)
-                    self.miner.pinged = neighbor.id
+                if not neighbors_copy:
+                    continue
+                else:
+                    for id, neighbor in neighbors_copy.items():
+                        # I say bye to my neighbors
+                        deconnectionMessage = (
+                            "Ping",
+                            self.miner.node.id,
+                            self.miner.node.host,
+                            self.miner.node.port,
+                        )
+                        self.miner.pinged = neighbor.id
 
-                    self.miner.sock.sendto(self.miner.serialize(deconnectionMessage), (neighbor.host, neighbor.port), )
+                        self.miner.sock.sendto(
+                            self.miner.serialize(deconnectionMessage),
+                            (neighbor.host, neighbor.port),
+                        )
 
-                    #time.sleep(10)
+                        # time.sleep(10)
 
-                    # try : 
-                    #     try:
-                    #         data, sender = self.miner.sock.recvfrom(1024)
-                    #         receivedmessage = self.miner.deserialize(data)
-                    #         if receivedmessage[0] == "Pong" and receivedmessage[1] == id:
-                    #             continue
-                    #         else: print('wtf')
-            
-                    #     except socket.timeout as e:
-                    #         #del self.miner.neighbors[neighbor.id]
-                    #         continue
-    
-                    # except socket.error as e:
-                    #     print(id, "ne répond plus")
-                    #     del self.miner.neighbors[neighbor.id]
-                    #     pass
+                        # try :
+                        #     try:
+                        #         data, sender = self.miner.sock.recvfrom(1024)
+                        #         receivedmessage = self.miner.deserialize(data)
+                        #         if receivedmessage[0] == "Pong" and receivedmessage[1] == id:
+                        #             continue
+                        #         else: print('wtf')
+
+                        #     except socket.timeout as e:
+                        #         #del self.miner.neighbors[neighbor.id]
+                        #         continue
+
+                        # except socket.error as e:
+                        #     print(id, "ne répond plus")
+                        #     del self.miner.neighbors[neighbor.id]
+                        #     pass
 
 
 class Listen(threading.Thread):
@@ -127,14 +137,14 @@ class Listen(threading.Thread):
                     if receivedNode[1] in self.miner.neighbors:
                         del self.miner.neighbors[receivedNode[1]]
                         print("reveiced {} from {}".format(receivedNode, sender))
-                #elif receivedNode[0] == "Ping":
+                # elif receivedNode[0] == "Ping":
                 #    m = ("Pong", self.miner.node.id)
                 #    self.miner.sock.sendto(self.miner.serialize(m), (receivedNode[2], receivedNode[3]), )
                 else:
                     pass
                 if receivedNode[0] != "Ping" and receivedNode[0] != "Pong":
                     print("reveiced {} from {}".format(receivedNode, sender))
-        
+
         except Exception as e:
             print("Other_Pickel_Error", e)
             pass
