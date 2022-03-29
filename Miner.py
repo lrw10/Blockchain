@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-
-from ctypes.wintypes import PLONG
+import traceback
+from Transaction import Transaction
 from Node import Node
+from Block import Block
 import pickle as pickle
 import socket, sys
 import threading
 import uuid
 import re
 import time
-
-# from ping3 import ping
 
 
 class PingActions(threading.Thread):
@@ -24,46 +23,36 @@ class PingActions(threading.Thread):
         while self.miner.node.run:
 
             time.sleep(10)
-            if self.miner.node.run:
-                neighbors_copy = neighbors_copy = self.miner.neighbors.copy()
+            neighbors_copy = neighbors_copy = self.miner.neighbors.copy()
 
-                if not neighbors_copy:
-                    continue
-                else:
-                    for id, neighbor in neighbors_copy.items():
-                        # I say bye to my neighbors
-                        deconnectionMessage = (
-                            "Ping",
-                            self.miner.node.id,
-                            self.miner.node.host,
-                            self.miner.node.port,
-                        )
-                        self.miner.pinged = neighbor.id
+            if not neighbors_copy: 
+                continue
+            else:
+                for id, neighbor in neighbors_copy.items():
+                    # I say bye to my neighbors
+                    deconnectionMessage = ("Ping", self.miner.node.id, self.miner.node.host, self.miner.node.port)
+                    self.miner.pinged = neighbor.id
 
-                        self.miner.sock.sendto(
-                            self.miner.serialize(deconnectionMessage),
-                            (neighbor.host, neighbor.port),
-                        )
+                    self.miner.sock.sendto(self.miner.serialize(deconnectionMessage), (neighbor.host, neighbor.port), )
 
-                        # time.sleep(10)
+                    #time.sleep(10)
 
-                        # try :
-                        #     try:
-                        #         data, sender = self.miner.sock.recvfrom(1024)
-                        #         receivedmessage = self.miner.deserialize(data)
-                        #         if receivedmessage[0] == "Pong" and receivedmessage[1] == id:
-                        #             continue
-                        #         else: print('wtf')
-
-                        #     except socket.timeout as e:
-                        #         #del self.miner.neighbors[neighbor.id]
-                        #         continue
-
-                        # except socket.error as e:
-                        #     print(id, "ne répond plus")
-                        #     del self.miner.neighbors[neighbor.id]
-                        #     pass
-
+                    # try : 
+                    #     try:
+                    #         data, sender = self.miner.sock.recvfrom(1024)
+                    #         receivedmessage = self.miner.deserialize(data)
+                    #         if receivedmessage[0] == "Pong" and receivedmessage[1] == id:
+                    #             continue
+                    #         else: print('wtf')
+            
+                    #     except socket.timeout as e:
+                    #         #del self.miner.neighbors[neighbor.id]
+                    #         continue
+    
+                    # except socket.error as e:
+                    #     print(id, "ne répond plus")
+                    #     del self.miner.neighbors[neighbor.id]
+                    #     pass
 
 class Listen(threading.Thread):
     def __init__(self, miner):
@@ -91,7 +80,7 @@ class Listen(threading.Thread):
                 """
                 try:
                     # wait for new message
-                    data, sender = self.miner.sock.recvfrom(1024)
+                    data, sender = self.miner.sock.recvfrom(8192)
                     # ignore self sended messages
                     if not self.sendToMyself(sender):
                         self.processData(data, sender)
@@ -99,10 +88,8 @@ class Listen(threading.Thread):
                         continue
                 except socket.timeout as e:
                     continue
-            ### Arrive quand on envoie un message à qqn qui n'existe pas avec la classe PingActions
             except socket.error as e:
-                print(self.miner.pinged, "ne répond plus")
-                del self.miner.neighbors[self.miner.pinged]
+                print("Socket_ERROR", e)
                 pass
         self.miner.sock.close()  # close the link
 
@@ -124,9 +111,23 @@ class Listen(threading.Thread):
                 if receivedNode.type == "MINER":
                     self.processMiner(receivedNode, sender)
                 elif receivedNode.type == "WALLET":
+                    self.processWallet(receivedNode, sender)
+            # Is it a Block?
+            if isinstance(receivedNode, Block):
+                if len(self.miner.blockchain) == 0:
+                    self.miner.blockchain.append(receivedNode)
+                elif (
+                    receivedNode.getBlockNumber()
+                    > self.miner.blockchain[-1].getBlockNumber()
+                ):
+                    self.miner.blockchain[-1] = receivedNode
+                else:
                     pass
+            # Is it a Transaction?
+            elif isinstance(receivedNode, Transaction):
+                self.broadcast(receivedNode, sender)
 
-            # Is it a response?
+            # Is it a message?
             elif (
                 isinstance(receivedNode, tuple)
                 and isinstance(receivedNode[0], str)
@@ -134,18 +135,16 @@ class Listen(threading.Thread):
             ):
                 if receivedNode[0] == "bye!":
                     # If I know the sender I delete it
-                    if receivedNode[1] in self.miner.neighbors:
-                        del self.miner.neighbors[receivedNode[1]]
-                        print("reveiced {} from {}".format(receivedNode, sender))
-                # elif receivedNode[0] == "Ping":
-                #    m = ("Pong", self.miner.node.id)
-                #    self.miner.sock.sendto(self.miner.serialize(m), (receivedNode[2], receivedNode[3]), )
-                else:
-                    pass
-                if receivedNode[0] != "Ping" and receivedNode[0] != "Pong":
-                    print("reveiced {} from {}".format(receivedNode, sender))
+                    if receivedNode[1] in self.miner.miners:
+                        del self.miner.miners[receivedNode[1]]
+                    elif receivedNode[1] in self.miner.wallets:
+                        del self.miner.wallets[receivedNode[1]]
+
+            print("reveiced {} from {}".format(receivedNode, sender))
+
         except Exception as e:
             print("Other_Pickel_Error", e)
+            traceback.print_exc()
             pass
 
         return
@@ -165,35 +164,107 @@ class Listen(threading.Thread):
         """
         return address == (self.miner.node.host, self.miner.node.port)
 
-    def processMiner(self, node, sender):
+    def processMiner(self, miner, sender):
         """Process Miner information
 
         Parameter
         ----------
-        node : Node object
+        miner : Node object
         sender: tuple
         """
         # new neighbor ?
-        if node.id not in self.miner.neighbors:
+        if miner.id not in self.miner.miners:
             # I send my new neighbor to my neighbors
-            for id, neighbor in self.miner.neighbors.items():
+            for id, neighbor in self.miner.miners.items():
                 self.miner.sock.sendto(
-                    self.miner.serialize(node),
+                    self.miner.serialize(miner),
                     (neighbor.host, neighbor.port),
                 )
 
                 # I send my neighbors to my new neighbor
                 self.miner.sock.sendto(
                     self.miner.serialize(neighbor),
-                    (node.host, node.port),
+                    (miner.host, miner.port),
                 )
 
             # I add my new neighbor to my neighbor list
-            self.miner.neighbors[node.id] = node
+            self.miner.miners[miner.id] = miner
             # send an "ACK" => self.miner.node
             self.miner.sock.sendto(
                 self.miner.serialize(self.miner.node),
                 sender,
+            )
+
+    def processWallet(self, wallet, sender):
+        """Process Wallet information
+
+        Parameter
+        ----------
+        wallet : Node object
+        sender: tuple
+        """
+        # new neighbor ?
+        if wallet.id not in self.miner.wallets:
+
+            # I add my new neighbor to my neighbor list
+            self.miner.wallets[wallet.id] = wallet
+            # send an "ACK" => self.miner.node
+            self.miner.sock.sendto(
+                self.miner.serialize(self.miner.node),
+                sender,
+            )
+
+    def broadcast(self, message, sender):
+        """Broadcast messages from wallets and build blocks
+
+        Parameter
+        ----------
+        message : tuple
+        sender: tuple
+        """
+        #############self.miner.bloc.addTransation(message[1])
+        self.addTransactionToBlock(message)
+        for id, neighbor in self.miner.miners.items():
+            if sender != (neighbor.host, neighbor.port):
+                self.miner.sock.sendto(
+                    self.miner.serialize(message),
+                    (neighbor.host, neighbor.port),
+                )
+
+    def addTransactionToBlock(self, transaction):
+        """Add transactions to blocks
+
+        Parameter
+        ----------
+        transaction : Transaction object
+        """
+        print("Compute block ", len(self.miner.blockchain))
+        if self.miner.blockchain == []:
+            genesis = Block(-1, -1)
+            genesis.closeBlock()
+            self.miner.blockchain.append(
+                Block(genesis.getPrevBlockHash(), genesis.getBlockNumber() + 1)
+            )
+        if self.miner.blockchain[-1].addTransaction(transaction):
+            return
+
+        else:
+            if self.miner.blockchain[-1].getBlockHash != None:
+                self.miner.blockchain[-1].closeBlock()
+                self.sendBlock(self.miner.blockchain[-1])
+            self.miner.blockchain.append(
+                Block(
+                    self.miner.blockchain[-1].getBlockHash(),
+                    self.miner.blockchain[-1].getBlockNumber() + 1,
+                )
+            )
+            self.miner.blockchain[-1].addTransaction(transaction)
+
+    def sendBlock(self, block):
+        for id, neighbor in self.miner.miners.items():
+            self.miner.sock.sendto(
+                self.miner.serialize(block),
+                (neighbor.host, neighbor.port),
             )
 
 
@@ -212,10 +283,12 @@ class Actions(threading.Thread):
 
             # neighbors
             if action == "v":
-                print(self.miner.neighbors)
+                print("Miners: ", self.miner.miners)
+                print("\n")
+                print("Wallets: ", self.miner.wallets)
 
             # deconnexion
-            elif action == "exit":
+            elif action == "s":
                 self.deconnection()
 
             elif action == "id":
@@ -239,8 +312,6 @@ class Actions(threading.Thread):
             elif action == "connect":
                 self.connection()
 
-            elif action == "STOP":
-                self.miner.node.run = False
             else:
                 continue
 
@@ -264,10 +335,16 @@ class Actions(threading.Thread):
         Stop the socket, the thread and send deconnection message to neighbors
         """
         try:
-            for id, neighbor in self.miner.neighbors.items():
-                # I say bye to my neighbors
-                deconnectionMessage = ("bye!", self.miner.node.id)
+            # I say bye to my neighbors
+            deconnectionMessage = ("bye!", self.miner.node.id)
 
+            for id, neighbor in self.miner.miners.items():
+                self.miner.sock.sendto(
+                    self.miner.serialize(deconnectionMessage),
+                    (neighbor.host, neighbor.port),
+                )
+
+            for id, neighbor in self.miner.wallets.items():
                 self.miner.sock.sendto(
                     self.miner.serialize(deconnectionMessage),
                     (neighbor.host, neighbor.port),
@@ -291,17 +368,15 @@ class Miner:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.sock.settimeout(self.__timeout)
         self.sock.bind((self.node.host, self.node.port))
-        self.pinged = 0
-        self.neighbors = {}
+        self.miners = {}
         self.wallets = {}
+        self.blockchain = []
 
     def run(self):
         L = Listen(self)
         A = Actions(self)
-        P = PingActions(self)
         L.start()
         A.start()
-        P.start()
 
     def serialize(self, node):
         """Transform Node object into bytes
