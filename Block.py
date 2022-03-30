@@ -19,10 +19,9 @@ class Block:
         self.__blockNumber = id
         self.__transactions = {}
         self.__merkelRoot = None
-        self.__time = time.time()
+        # self.__time = None  # time.time()
         self.__nonce = None
         self.__blockHash = None
-        self.__id = uuid.uuid4()
         self.__noncePattern = "0xd"
 
     def getBlockHash(self):
@@ -34,14 +33,17 @@ class Block:
     def getPrevBlockHash(self):
         return self.__prevBlockHash
 
+    def setPrevBlockHash(self, prevBlockHash):
+        self.__prevBlockHash = prevBlockHash
+
     def getNonce(self):
         if self.__nonce:
             return self.__nonce
         else:
             return None
 
-    def getTime(self):
-        return self.__time
+    # def getTime(self):
+    #     return self.__time
 
     def getMerkelRoot(self):
         if self.__merkelRoot:
@@ -58,18 +60,20 @@ class Block:
     def setMaxTransactions(self, newValue):
         self.__maxTransactions = newValue
 
-    def getId(self):
-        return self.__id
-
     def getBlockNumber(self):
         return self.__blockNumber
+
+    def setBlockNumber(self, num):
+        self.__blockNumber = num
 
     def addTransaction(self, transaction):
 
         if transaction.getId() not in self.__transactions:
             # if I have enougth place to add a transaction I add it
             if len(self.__transactions) < self.__maxTransactions:
-                self.__transactions[transaction.getId()] = transaction
+                self.__transactions[transaction.getId()] = self.strToHex(
+                    hashlib.sha256(pickle.dumps(transaction)).digest().hex()
+                )
                 return True
 
             else:
@@ -78,11 +82,11 @@ class Block:
             pass
 
     def closeBlock(self):
-        if len(self.__transactions) == self.__maxTransactions:
-            self.__blockHash = self.computeBlockHash()
-            self.__nonce = self.computeNonce()
-            self.__merkelRoot = self.computeMerkelRoot()
-            self.__time = time.time()
+        # if len(self.__transactions) == self.__maxTransactions:
+        self.__blockHash = self.computeBlockHash()
+        self.__nonce = self.computeNonce()
+        self.__merkelRoot = self.computeMerkelRoot()
+        # self.__time = None  # time.time()
 
     def computeBlockHash(self):
         """compute the blockHash of the current block
@@ -91,7 +95,10 @@ class Block:
         Returns
             The sha256 hash of the current block in hexadecimal format
         """
-        return self.strToHex(hashlib.sha256(pickle.dumps(self)).digest().hex())
+
+        return self.strToHex(
+            hashlib.sha256(pickle.dumps(self.__transactions)).digest().hex()
+        )
 
     def computeNonce(self):
         """compute a hexadecimal value that verify self.__noncePattern constraint by multiplication with self.__blockHash
@@ -101,13 +108,14 @@ class Block:
             Hexadecimal
         """
         nonce = hex(1)
+        print("Comput Nonce ...")
         while not self.valideNonce(nonce):
-            print("Comput Nonce ...")
+
             nonce = self.intToHex(
                 self.hexToInt(nonce) * self.hexToInt(self.__blockHash)
             )
 
-            print((nonce))
+            # print((nonce))
             self.valideNonce(nonce)
         return nonce
 
@@ -119,8 +127,6 @@ class Block:
             Bool
         """
         for i in range(len(self.__noncePattern)):
-            print("nonce[i] = ", nonce[i])
-            print("noncePattern[i] = ", self.__noncePattern[i])
             if nonce[i] != self.__noncePattern[i]:
                 return False
 
