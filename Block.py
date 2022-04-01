@@ -7,6 +7,9 @@ import hashlib
 import time
 import uuid
 import re
+import math
+from Leaf_merkleTree import Leaf
+from Merkle_Tree import MerkleTree
 
 
 class Block:
@@ -19,6 +22,7 @@ class Block:
         self.__blockNumber = id
         self.__transactions = {}
         self.__merkelRoot = None
+        self.__merkleTree = None
         # self.__time = None  # time.time()
         self.__nonce = None
         self.__blockHash = None
@@ -86,6 +90,11 @@ class Block:
         self.__blockHash = self.computeBlockHash()
         self.__nonce = self.computeNonce()
         self.__merkelRoot = self.computeMerkelRoot()
+        if self.__blockNumber != -1:
+            print("Compute Merkle Root...")
+            self.computeMerkleTree()
+            print("Merkle Root: ", self.__merkelRoot)
+            #self.printTree()
         # self.__time = None  # time.time()
 
     def computeBlockHash(self):
@@ -143,3 +152,35 @@ class Block:
 
     def computeMerkelRoot(self):
         return "MKLR"
+    
+    def computeMerkleTree(self):
+        self.__merkleTree = MerkleTree()
+        
+        self.__merkleTree.create_Tree(self.__transactions, True, 0)
+        self.__merkelRoot = self.__merkleTree.merkleRoot
+        
+    def printTree(self):
+        print("\n")
+        self.__merkleTree.print_Tree()
+        print("\n")
+        
+    """
+    Compute MerkleProof
+    """
+    def checkTransaction(self, id):
+        id = uuid.UUID(id)
+        try:
+            transaction = self.__transactions[id]
+        except Exception as e:
+            print("Transaction Inconnue")
+            return
+        print("\n Merkle Proof from Transaction : ", transaction)
+        
+        bool, proof = self.__merkleTree.MerkleProof(transaction)
+        
+        print("\n Résultat test: ", bool)
+        print("Preuve: ", proof)
+        print("\n")
+        x = self.__merkleTree.testProof(proof, transaction)
+        
+        return x

@@ -132,7 +132,7 @@ class AutoSend(threading.Thread):
 
     def run(self):
         if len(self.wallet.miners) > 0:
-            while self.wallet.node.run:
+            while self.wallet.stopSend:
 
                 time.sleep(self.__SLEEP)
                 try:
@@ -148,6 +148,7 @@ class AutoSend(threading.Thread):
                         self.wallet.sock.sendto(
                             self.wallet.serialize(message), (miner.host, miner.port)
                         )
+                        print("Transaction ", transaction.getId(), "a été envoyée")
                 except socket.error as e:
                     print(e, "\n message not send.")
                     pass
@@ -199,9 +200,17 @@ class Actions(threading.Thread):
 
             elif action == "send":
                 self.sendMessage()
+                
+            elif action == 'stop':
+                self.wallet.stopSend = False
+                
+            elif action == 'Check':
+                self.askProof()
 
             elif action == "auto send":
                 # self.autoSendMessage()
+                print("Taper 'stop' pour arrêter")
+                self.wallet.stopSend = True
                 if len(self.wallet.miners) > 0:
                     self.autoSendMessage()
 
@@ -277,6 +286,21 @@ class Actions(threading.Thread):
         """
         A = AutoSend(self.wallet)
         A.start()
+        
+    def askProof(self):
+        if len(self.wallet.miners) > 0:
+            message = (("Check", input("Please enter your transaction ID:")), self.wallet.node.id)
+            try: 
+                for id, miner in self.wallet.miners.items():
+                    self.wallet.sock.sendto(
+                    self.wallet.serialize(message),
+                    (miner.host, miner.port),
+                )
+            except socket.error as e:
+                print(e, '\n message not send.')
+                pass
+        else:
+            print("Please try to connect to a miner")
 
 
 class Wallet:
@@ -289,6 +313,7 @@ class Wallet:
         self.sock.settimeout(self.__timeout)
         self.sock.bind((self.node.host, self.node.port))
         self.miners = {}
+        self.stopSend = True
 
     def run(self):
         L = Listen(self)

@@ -16,7 +16,6 @@ import time
 
 # from ping3 import ping
 
-
 class PingActions(threading.Thread):
     def __init__(self, miner):
         threading.Thread.__init__(self)
@@ -151,6 +150,10 @@ class Listen(threading.Thread):
                         del self.miner.neighbors[deserializedData[1]]
                     elif deserializedData[1] in self.miner.wallets:
                         del self.miner.wallets[deserializedData[1]]
+                        
+                # if deserializedData[0] == "Check Proof Please":
+                #     if len(self.miner.blockchain) >= 2:
+                #         self.miner.blockchain[-1].checkTransaction()
 
                 if self.__sendBlockchainRequest.match(deserializedData[0]):
                     # self.processBlockRequest(deserializedData[0], sender)
@@ -160,6 +163,26 @@ class Listen(threading.Thread):
                         args=(),
                     )
                     thread.start()
+            ## Is it a message to check the merkle Tree?
+            elif (
+                isinstance(deserializedData, tuple)
+                and isinstance(deserializedData[0], tuple)
+                and isinstance(deserializedData[1], uuid.UUID)
+            ):
+                if deserializedData[0][0] == "Check":
+                    if len(self.miner.blockchain) >= 2:
+                        x = self.miner.blockchain[-1].checkTransaction(deserializedData[0][1])
+                        try: 
+
+                                print(x)
+                                self.miner.sock.sendto(
+                                self.miner.serialize(x),
+                                sender,
+                            )
+                        except socket.error as e:
+                            print(e, '\n message not send.')
+                            pass
+            
             print("reveiced {} from {}".format(deserializedData, sender))
 
         except Exception as e:
