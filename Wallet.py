@@ -174,7 +174,7 @@ class Actions(threading.Thread):
                 print(self.wallet.miners)
 
             # deconnexion
-            elif action == "s":
+            elif action == "exit":
                 self.deconnection()
 
             elif action == "id":
@@ -200,11 +200,11 @@ class Actions(threading.Thread):
 
             elif action == "send":
                 self.sendMessage()
-                
-            elif action == 'stop':
+
+            elif action == "stop":
                 self.wallet.stopSend = False
-                
-            elif action == 'Check':
+
+            elif action == "Check":
                 self.askProof()
 
             elif action == "auto send":
@@ -286,18 +286,21 @@ class Actions(threading.Thread):
         """
         A = AutoSend(self.wallet)
         A.start()
-        
+
     def askProof(self):
         if len(self.wallet.miners) > 0:
-            message = (("Check", input("Please enter your transaction ID:")), self.wallet.node.id)
-            try: 
+            message = (
+                ("Check", input("Please enter your transaction ID:")),
+                self.wallet.node.id,
+            )
+            try:
                 for id, miner in self.wallet.miners.items():
                     self.wallet.sock.sendto(
-                    self.wallet.serialize(message),
-                    (miner.host, miner.port),
-                )
+                        self.wallet.serialize(message),
+                        (miner.host, miner.port),
+                    )
             except socket.error as e:
-                print(e, '\n message not send.')
+                print(e, "\n message not send.")
                 pass
         else:
             print("Please try to connect to a miner")
