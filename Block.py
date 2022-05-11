@@ -78,12 +78,12 @@ class Block:
                 self.__transactions[transaction.getId()] = self.strToHex(
                     hashlib.sha256(pickle.dumps(transaction)).digest().hex()
                 )
-                return True
+                return "OK"
 
             else:
-                return False
+                return "OK but in next block"
         else:
-            pass
+            return "not OK"
 
     def closeBlock(self):
         # if len(self.__transactions) == self.__maxTransactions:

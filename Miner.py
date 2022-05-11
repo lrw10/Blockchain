@@ -267,7 +267,7 @@ class Listen(threading.Thread):
         sender: tuple
         """
         #############self.miner.bloc.addTransation(message[1])
-        self.addTransactionToBlock(message)
+        if self.addTransactionToBlock(message):
         for id, neighbor in self.miner.neighbors.items():
             if sender != (neighbor.host, neighbor.port):
                 self.miner.sock.sendto(
@@ -284,10 +284,10 @@ class Listen(threading.Thread):
         """
         print("Compute block ", len(self.miner.blockchain) - 1)
 
-        if self.miner.myBlock.addTransaction(transaction):
-            return
-
-        else:
+        if self.miner.myBlock.addTransaction(transaction) == "OK":
+            return True
+        # transaction not added
+        elif self.miner.myBlock.addTransaction(transaction) == "OK but in next block":
 
             self.miner.myBlock != None
             thread = threading.Thread(
@@ -304,7 +304,10 @@ class Listen(threading.Thread):
                 self.miner.blockchain[-1].getBlockHash(),
                 self.miner.blockchain[-1].getBlockNumber() + 1,
             )
-            self.miner.myBlock.addTransaction(transaction)
+            if self.miner.myBlock.addTransaction(transaction) == "OK":
+                return True
+            else:
+                return False
 
     def sendBlock(self, block, dest=None):
         if isinstance(block, Block):
