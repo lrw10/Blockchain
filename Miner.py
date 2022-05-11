@@ -97,7 +97,7 @@ class Listen(threading.Thread):
                 """
                 try:
                     # wait for new message
-                    data, sender = self.miner.sock.recvfrom(8192)
+                    data, sender = self.miner.sock.recvfrom(131072)
                     # ignore self sended messages
                     if not self.sendToMyself(sender):
                         self.processData(data, sender)
